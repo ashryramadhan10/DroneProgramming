@@ -1,77 +1,73 @@
-import time
 from pymavlink import mavutil
+import time
 
-# Create the connection (udpout for sending, `udpin` for receiving), MavLink v2 by default
-master = mavutil.mavlink_connection(device="/dev/ttyACM0,115200")
+def send_hil_gps(vehicle, time_usec, fix_type, lat, lon, alt, eph, epv, vel, vn, ve, vd, cog, satellites_visible, gps_id, yaw):
+    """
+    Send HIL_GPS message with simulated GPS data.
 
-# wait for a heartbeat
-master.wait_heartbeat(timeout=5)
-
-# debugging messages
-print("Connected to the master")
-print("Target system:", master.target_system, "Target component:", master.target_component)
-
-# We dont wait for 'hearbeat' from Ground Control Station (GCS) here
-
-# NOTE: 'MAV_MODE_MANUAL_ARMED' and 'MAV_STATE_ACTIVE' 
-# important here, otherwise QGroundControl will not show 'Connected' 
-# state, but still receive data (spotted in 'MAVLink Inspector' tab).
-def send_heartbeat():
-    master.mav.heartbeat_send(
-        mavutil.mavlink.MAV_TYPE_QUADROTOR,    # Type of the MAV
-        mavutil.mavlink.MAV_AUTOPILOT_GENERIC, # Autopilot type
-        mavutil.mavlink.MAV_MODE_MANUAL_ARMED, # Base mode (manual and armed)
-        0,                                     # Custom mode
-        mavutil.mavlink.MAV_STATE_ACTIVE       # System status (active)
+    Parameters:
+    vehicle: MAVLink connection object
+    time_usec: Timestamp in microseconds
+    fix_type: GPS fix type (0-1: no fix, 2: 2D fix, 3: 3D fix)
+    lat: Latitude in degrees * 1e7
+    lon: Longitude in degrees * 1e7
+    alt: Altitude in millimeters
+    eph: GPS HDOP (horizontal dilution of precision) in units of 100
+    epv: GPS VDOP (vertical dilution of precision) in units of 100
+    vel: Ground speed in cm/s
+    vn: Velocity North in cm/s
+    ve: Velocity East in cm/s
+    vd: Velocity Down in cm/s
+    cog: Course over ground in degrees * 100
+    satellites_visible: Number of satellites visible
+    gps_id: GPS ID (zero indexed)
+    yaw: Yaw in degrees * 100
+    """
+    msg = vehicle.mav.hil_gps_encode(
+        time_usec,  # Timestamp in microseconds
+        fix_type,  # GPS fix type
+        lat,  # Latitude in degrees * 1e7
+        lon,  # Longitude in degrees * 1e7
+        alt,  # Altitude in millimeters
+        eph,  # GPS HDOP in units of 100
+        epv,  # GPS VDOP in units of 100
+        vel,  # Ground speed in cm/s
+        vn,  # Velocity North in cm/s
+        ve,  # Velocity East in cm/s
+        vd,  # Velocity Down in cm/s
+        cog,  # Course over ground in degrees * 100
+        satellites_visible,  # Number of satellites visible
+        gps_id,  # GPS ID (zero indexed)
+        yaw  # Yaw in degrees * 100
     )
+    vehicle.mav.send(msg)
 
-def send_attitude(roll, pitch, yaw, rollspeed, pitchspeed, yawspeed):
-    master.mav.attitude_send(
-        int(time.time() * 1000) & 0xFFFFFFFF,  # time_boot_ms (convert to ms and wrap around to fit 32-bit)
-        roll, pitch, yaw,               # radians
-        rollspeed, pitchspeed, yawspeed # radians/s
-    )
+def main():
+    # Create a connection to the FCU
+    vehicle = mavutil.mavlink_connection(device="/dev/ttyACM1,115200")
+    vehicle.wait_heartbeat(timeout=5)
+    print("Connected to the vehicle")
 
-def send_gps(lat, lon, alt, fix_type=3):
-    master.mav.gps_raw_int_send(
-        int(time.time() * 1000),  # time_boot_ms
-        fix_type,                 # GPS fix type
-        lat, lon, alt,            # latitude, longitude, altitude
-        0,                    # eph (position uncertainty)
-        0,                    # epv (altitude uncertainty)
-        0,                    # velocity (cm/s)
-        0,                    # course over ground (degrees * 100)
-        10,                      # num satellites visible
-    )
+    while True:
+        # Example GPS data
+        time_usec = int(time.time() * 1e6)  # Timestamp in microseconds
+        fix_type = 3  # GPS fix type (3 = 3D fix)
+        lat = int(35.084385 * 1e7)  # Latitude in degrees * 1e7
+        lon = int(-106.650422 * 1e7)  # Longitude in degrees * 1e7
+        alt = 585 * 1000  # Altitude in millimeters (585 meters)
+        eph = 50  # Example HDOP (horizontal dilution of precision) * 100
+        epv = 50  # Example VDOP (vertical dilution of precision) * 100
+        vel = 1000  # Example ground speed in cm/s (10 m/s)
+        vn = 0     # North velocity in cm/s
+        ve = 0     # East velocity in cm/s
+        vd = 0     # Down velocity in cm/s
+        cog = int(90 * 100)  # Example course over ground (90 degrees * 100)
+        satellites_visible = 10  # Number of satellites visible
+        gps_id = 0  # GPS ID (zero indexed)
+        yaw = int(90 * 100)  # Example yaw (90 degrees * 100)
 
-def send_vfr_hud(airspeed, groundspeed, heading, throttle, alt, climb):
-    master.mav.vfr_hud_send(
-        airspeed, groundspeed, heading, throttle, alt, climb
-    )
+        send_hil_gps(vehicle, time_usec, fix_type, lat, lon, alt, eph, epv, vel, vn, ve, vd, cog, satellites_visible, gps_id, yaw)
+        time.sleep(1)  # Send data every second
 
-def send_sys_status():
-    master.mav.sys_status_send(
-        0,      # onboard_control_sensors_present
-        0,      # onboard_control_sensors_enabled
-        0,      # onboard_control_sensors_health
-        500,    # load
-        12000,  # voltage_battery
-        -1,     # current_battery
-        -1,     # battery_remaining
-        0,      # drop_rate_comm
-        0,      # errors_comm
-        0,      # errors_count1
-        0,      # errors_count2
-        0,      # errors_count3
-        0,      # errors_count4
-    )
-
-while True:
-    send_heartbeat()
-    send_attitude(0, 0, 90, 0, 0, 0)
-    send_gps(473566000, 851234567, 500000)
-    send_vfr_hud(0, 0, 0, 50, 50, 0)
-    send_sys_status()
-
-    time.sleep(1)
-    print("successfully sent hil gps input")
+if __name__ == "__main__":
+    main()

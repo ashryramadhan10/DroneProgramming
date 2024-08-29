@@ -5,8 +5,8 @@ loop_period = 0.1  # seconds
 
 # Create a connection to the FCU
 # Replace 'udpout:localhost:14550' with the appropriate connection string for your setup
-# vehicle = mavutil.mavlink_connection(device="/dev/ttyACM0,115200")
-vehicle = mavutil.mavlink_connection(device="127.0.0.1:14551")
+vehicle = mavutil.mavlink_connection(device="/dev/ttyACM0,115200")
+# vehicle = mavutil.mavlink_connection(device="127.0.0.1:14551")
 
 # wait for a heartbeat
 vehicle.wait_heartbeat(timeout=5)
